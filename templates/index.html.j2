@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why did {{ r.root_label }} move?</title>
+<style>
+  :root { --teal: {{ teal }}; --teal-dark: {{ teal_dark }}; --teal-light: {{ teal_light }};
+          --bad: {{ root_cause_color }}; --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f8fafc; color: var(--ink);
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { border-left: 6px solid var(--teal); padding-left: 14px; margin-bottom: 20px; }
+  header .kicker { color: var(--teal-dark); font-weight: 700; text-transform: uppercase;
+                   font-size: 12px; letter-spacing: .06em; }
+  h1 { margin: 2px 0 0; font-size: 26px; }
+  h2 { font-size: 16px; color: var(--teal-dark); margin: 0 0 10px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px;
+          padding: 16px; margin-bottom: 16px; }
+  .kpis { display: flex; flex-wrap: wrap; gap: 12px; }
+  .kpi { flex: 1 1 160px; border-top: 3px solid var(--teal); background: #fff;
+         border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); border-top-width: 3px; }
+  .kpi .l { color: var(--muted); font-size: 12px; }
+  .kpi .v { font-size: 22px; font-weight: 700; }
+  .down { color: var(--bad); } .up { color: var(--teal-dark); }
+  img { width: 100%; height: auto; display: block; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; }
+  th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--teal-dark); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  tr.rc td { background: #fef2f2; font-weight: 600; }
+  .tag { background: var(--bad); color: #fff; border-radius: 4px; padding: 1px 6px;
+         font-size: 11px; margin-left: 6px; }
+  ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 20px; border-left: 2px solid var(--teal-light); }
+  ul.tree { border: 0; padding-left: 0; }
+  ul.tree li { margin: 6px 0; }
+  .node { display: inline-block; background: var(--teal-light); border-radius: 6px; padding: 3px 9px; }
+  .node.rc { background: #fee2e2; outline: 1px solid var(--bad); }
+  .node small { color: var(--muted); }
+  .check { font-size: 13px; color: var(--muted); }
+  .badge { background: var(--teal); color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+  .badge.fail { background: var(--bad); }
+  .note { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Weekly Business Review &middot; Metric movement</div>
+    <h1>{{ r.root_label }} {{ r.pct_change|pct }}
+        <span class="{{ 'down' if r.delta < 0 else 'up' }}">({{ r.delta|usd_delta }})</span></h1>
+  </header>
+
+  <div class="kpis" style="margin-bottom:16px">
+    <div class="kpi"><div class="l">{{ last_label }}</div><div class="v">{{ r.root|val(r.last) }}</div></div>
+    <div class="kpi"><div class="l">{{ this_label }}</div><div class="v">{{ r.root|val(r.this) }}</div></div>
+    <div class="kpi"><div class="l">Root cause</div>
+      <div class="v down" style="font-size:18px">{{ r.root_cause.label }}</div></div>
+    <div class="kpi"><div class="l">Share of move</div>
+      <div class="v">{{ '%.0f'|format(r.root_cause.share_of_change_pct) }}%</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Narrative</h2>
+    {% for p in narrative_paras %}<p>{{ p }}</p>{% endfor %}
+    {% if narrative_is_fallback %}
+    <p class="note">Auto-generated summary. Run <code>python narrate.py</code>, paste the prompt into
+    Claude.ai and save the reply to <code>data/narrative.txt</code> for a full WBR narrative.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Waterfall</h2>
+    {% if waterfall_b64 %}<img alt="Waterfall chart of driver contributions"
+         src="data:image/png;base64,{{ waterfall_b64 }}">{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Driver contributions</h2>
+    <div class="scroll"><table>
+      <tr><th>#</th><th>Driver</th><th>{{ last_label }}</th><th>{{ this_label }}</th>
+          <th>Change</th><th>Contribution</th><th>Share of move</th></tr>
+      {% for l in r.leaves %}
+      <tr class="{{ 'rc' if l.name == r.root_cause.name else '' }}">
+        <td>{{ l.rank }}</td>
+        <td>{{ l.label }}{% if l.name == r.root_cause.name %}<span class="tag">root cause</span>{% endif %}</td>
+        <td>{{ l.name|val(l.last) }}</td><td>{{ l.name|val(l.this) }}</td>
+        <td>{{ l.pct_change|pct }}</td><td>{{ l.contribution|usd_delta }}</td>
+        <td>{{ '%.0f'|format(l.share_of_change_pct) }}%</td></tr>
+      {% endfor %}
+      {% for i in r.interactions %}
+      <tr><td></td><td>{{ i.label }}</td><td></td><td></td><td></td>
+          <td>{{ i.contribution|usd_delta }}</td>
+          <td>{{ '%.1f'|format(i.contribution / r.delta * 100 if r.delta else 0) }}%</td></tr>
+      {% endfor %}
+      <tr><th style="text-align:left" colspan="5">Total</th>
+          <th>{{ r.delta|usd_delta }}</th><th>100%</th></tr>
+    </table></div>
+    <p class="check">
+      {% set c = r.reconciliation %}
+      <span class="badge {{ '' if c.passed else 'fail' }}">{{ 'Reconciled' if c.passed else 'Check failed' }}</span>
+      Drivers {{ c.sum_leaf_contributions|usd_delta }} + interaction {{ c.sum_interaction|usd_delta }}
+      = {{ (c.sum_leaf_contributions + c.sum_interaction)|usd_delta }} vs actual {{ c.total_change|usd_delta }}
+      (interaction {{ '%.2f'|format(c.interaction_pct_of_total) }}% of total).
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Metric tree</h2>
+    {% macro render_node(n) %}
+      <li><span class="node {{ 'rc' if n.name == r.root_cause.name else '' }}">
+        <strong>{{ n.label }}</strong> {{ n.name|val(n.last) }} &rarr; {{ n.name|val(n.this) }}
+        <small>({{ n.pct_change|pct }}; {{ n.contribution|usd_delta }})</small></span>
+        {% if n.children %}<ul>{% for c in n.children %}{{ render_node(c) }}{% endfor %}</ul>{% endif %}
+      </li>
+    {% endmacro %}
+    <ul class="tree">{{ render_node(r.tree) }}</ul>
+  </div>
+</div>
+</body>
+</html>
